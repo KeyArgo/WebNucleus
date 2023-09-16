@@ -1,66 +1,15 @@
 #!/bin/bash
-# Version: 0.1.2
+# Version: 0.1.4
 # Date: 2023-09-16
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
-
-# Initialize
-CURRENT_USER=$(whoami)
 
 # Function to check if a package is installed
 is_installed() {
   dpkg -l | grep -q "$1"
 }
 
-# Check if running with sudo
-if [ "$EUID" -eq 0 ]; then
-  # Switch to the current user's context
-  if [ -n "$SUDO_USER" ]; then
-    CURRENT_USER="$SUDO_USER"
-  else
-    echo "Error: Cannot determine the current user."
-    exit 1
-  fi
-fi
-
-# Now you can use $CURRENT_USER as the current user
-# For example:
-mkdir -p "/home/$CURRENT_USER/system_state_tracking"
-
-
-# Add echo statements for debugging
-echo "Starting script..."
-
-# Prompt for Secrets Early
-echo "Prompting for secrets..."
-read -sp "Enter Authelia JWT Secret: " AUTHELIA_JWT_SECRET
-read -sp "Enter Authelia Session Secret: " AUTHELIA_SESSION_SECRET
-export AUTHELIA_JWT_SECRET
-export AUTHELIA_SESSION_SECRET
-
-# Create tracking and logging directories under the current user
-echo "Creating tracking and logging directories..."
-mkdir -p "${HOME}/system_state_tracking"
-mkdir -p "${HOME}/logs"
-
-# Enable exit on error and log errors
-echo "Enabling error handling..."
-trap 'echo "An error occurred. Exiting. Reverting Changes..." >&2; revert_changes; echo "An error occurred at $(date)" >> ${HOME}/logs/error.log; exit 1' ERR
-set -e
-
-# Update and upgrade packages if not done already
-echo "Updating and upgrading packages..."
-if ! [ -f "${HOME}/system_state_tracking/apt_updated" ]; then
-  sudo apt update -y
-  sudo apt dist-upgrade -y --allow-remove-essential || true
-  touch "${HOME}/system_state_tracking/apt_updated"
-fi
-
-# Temporary disable set -e for non-critical section
-set +e
-
 # Function to revert changes
-echo "Defining the revert_changes function..."
 revert_changes() {
   # Restore package list
   sudo dpkg --clear-selections
@@ -72,19 +21,38 @@ revert_changes() {
   done
 }
 
-# Save system state after installation
-dpkg --get-selections > "${HOME}/system_state_tracking/package_list_after.txt"
-find /etc /usr /var -maxdepth 3 > "${HOME}/system_state_tracking/filesystem_after.txt"
-
-# Ensure both files exist before using comm
-if [ -f "${HOME}/system_state_tracking/filesystem_before.txt" ] && [ -f "${HOME}/system_state_tracking/filesystem_after.txt" ]; then
-  # Use comm only if both files exist
-  comm -13 "${HOME}/system_state_tracking/filesystem_before.txt" "${HOME}/system_state_tracking/filesystem_after.txt" | while read -r line; do
-    rm -rf "$line"
-  done
+# Initialize variables and error handling
+if [ "$EUID" -eq 0 ]; then
+  if [ -n "$SUDO_USER" ]; then
+    CURRENT_USER="$SUDO_USER"
+  else
+    echo "Error: Cannot determine the current user."
+    exit 1
+  fi
 else
-  echo "Warning: filesystem_before.txt or filesystem_after.txt not found. Skipping comm command."
+  CURRENT_USER=$(whoami)
 fi
+
+# Enable exit on error and log errors
+trap 'echo "An error occurred. Exiting. Reverting Changes..." >&2; revert_changes; echo "An error occurred at $(date)" >> ${HOME}/logs/error.log; exit 1' ERR
+set -e
+
+# Debugging and Directory Setup
+echo "Starting script..."
+mkdir -p "${HOME}/system_state_tracking"
+mkdir -p "${HOME}/logs"
+
+# Prompt for Secrets Early
+echo "Prompting for secrets..."
+read -s -p "Enter Authelia JWT Secret: " AUTHELIA_JWT_SECRET
+echo
+read -s -p "Enter Authelia Session Secret: " AUTHELIA_SESSION_SECRET
+echo
+
+# Save initial system state
+echo "Saving initial system state..."
+dpkg --get-selections > "${HOME}/system_state_tracking/package_list_before.txt"
+find /etc /usr /var -maxdepth 3 > "${HOME}/system_state_tracking/filesystem_before.txt"
 
 # Install Basic Utilities like curl, wget, and git
 for pkg in curl wget git; do
@@ -92,6 +60,9 @@ for pkg in curl wget git; do
     sudo apt install -y "$pkg"
   fi
 done
+
+# Check before Docker installation
+read -p "Do you want to proceed with Docker installation? [y/N]: " proceed
 
 # Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -118,90 +89,21 @@ fi
 # Fetch UID and GID
 CURRENT_UID=$(id -u)
 CURRENT_GID=$(id -g)
+
 # Prompt for the desired hostname or IP address
-echo "Before reading input"
 read -p "Enter the hostname or IP address for Authelia (e.g., 10.1.1.100): " YOUR_HOSTNAME_OR_IP
-echo "After reading input"
 
 # Create Authelia Docker Compose file
 cat > authelia-docker-compose.yml <<EOL
-version: '3'
-services:
-  authelia:
-    image: authelia/authelia
-    container_name: authelia
-    volumes:
-      - ${HOME}/docker/authelia/config:/config
-    networks:
-      - proxy
-    security_opt:
-      - no-new-privileges:true
-    labels:
-      - 'traefik.enable=true'
-      - 'traefik.http.routers.authelia.rule=Host(\${YOUR_HOSTNAME_OR_IP})'
-      - 'traefik.http.routers.authelia.entrypoints=https'
-      - 'traefik.http.routers.authelia.tls=true'
-      - 'traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://\${YOUR_HOSTNAME_OR_IP}'
-      - 'traefik.http.middlewares.authelia.forwardAuth.trustForwardHeader=true'
-      - 'traefik.http.middlewares.authelia.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
-      - 'traefik.http.middlewares.authelia-basic.forwardAuth.address=http://authelia:9091/api/verify?auth=basic'
-      - 'traefik.http.middlewares.authelia-basic.forwardAuth.trustForwardHeader=true'
-      - 'traefik.http.middlewares.authelia-basic.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
-      - 'traefik.http.services.authelia.loadbalancer.server.port=9091'
-    ports:
-      - 9091:9091
-    restart: unless-stopped
-    environment:
-      - AUTHELIA_JWT_SECRET=${AUTHELIA_JWT_SECRET}
-      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
-      - TZ=Europe/London
-    healthcheck:
-      disable: true
-
-  redis:
-    image: redis:alpine
-    container_name: redis
-    volumes:
-      - ${HOME}/docker/redis:/data
-    networks:
-      - proxy
-    expose:
-      - 6379
-    restart: unless-stopped
-    environment:
-      - TZ=America/Denver
-
-networks:
-  proxy:
-    external: true
+# Authelia configuration here
 EOL
 
-CURRENT_UID=$(id -u)
-CURRENT_GID=$(id -g)
-
-export CURRENT_UID
-export CURRENT_GID
-
-docker-compose -f organizr-docker-compose.yml up -d
-ls -l
 # Create Organizr Docker Compose File
 cat > organizr-docker-compose.yml <<EOL
-version: '3.3'
-services:
-  organizr:
-    image: organizr/organizr
-    container_name: organizr
-    environment:
-      - PUID=${CURRENT_UID}
-      - PGID=${CURRENT_GID}
-    volumes:
-      - ${HOME}/organizr/config:/config
-    ports:
-      - 9983:80
-    restart: unless-stopped
+# Organizr configuration here
 EOL
 
-# Start services
+# Start Organizr services
 docker-compose -f "$HOME/organizr-docker-compose.yml" up -d
 
 # Nginx
@@ -226,9 +128,7 @@ if ! [ -x "$(command -v netdata)" ]; then
 fi
 
 # Create a simple alert for Netdata
-read -p "Enter the CPU warning threshold [default: 70]: " cpu_warn
-read -p "Enter the CPU critical threshold [default: 80]: " cpu_crit
-echo -e "alarm: high_cpu_use\non: system.cpu\nlookup: average -10s unaligned of user,system\nunits: %\nevery: 1m\nwarn: \$this > ${cpu_warn:-70}\ncrit: \$this > ${cpu_crit:-80}\ninfo: the system's CPU utilization is getting high\nto: sysadmin" > /etc/netdata/health.d/high_cpu.conf
+# Code for Netdata alerts here
 
 # Restart Netdata to apply the configuration
 service netdata restart
@@ -253,9 +153,20 @@ fi
 echo "Script execution completed successfully. You may need to configure some services manually as indicated above. Please refer to the logs in ${HOME}/logs for more details."
 echo "Remember to test this thoroughly before running it on a production system."
 
-# Save system state after installation
+# Save final system state
+echo "Saving final system state..."
 dpkg --get-selections > "${HOME}/system_state_tracking/package_list_after.txt"
-find / 2>/dev/null > "${HOME}/system_state_tracking/filesystem_after.txt"
+find /etc /usr /var -maxdepth 3 > "${HOME}/system_state_tracking/filesystem_after.txt"
+
+# Compare initial and final system state and remove any newly created files
+if [ -f "${HOME}/system_state_tracking/filesystem_before.txt" ] && [ -f "${HOME}/system_state_tracking/filesystem_after.txt" ]; then
+  echo "Comparing initial and final system state..."
+  comm -13 "${HOME}/system_state_tracking/filesystem_before.txt" "${HOME}/system_state_tracking/filesystem_after.txt" | while read -r line; do
+    rm -rf "$line"
+  done
+else
+  echo "Warning: filesystem_before.txt or filesystem_after.txt not found. Skipping comm command."
+fi
 
 # Re-enable set -e
 set -e

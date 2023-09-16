@@ -1,12 +1,15 @@
 #!/bin/bash
-# Version: 0.1.3
+# Version: 0.1.4
 # Date: 2023-09-16
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Uninstall and revert services and packages installed by the install script.
 
+# Enable exit on error and log errors
+trap 'echo "An error occurred while uninstalling. Exiting..." >&2; exit 1' ERR
+set -e
+
 # Check if running with sudo
 if [ "$EUID" -eq 0 ]; then
-  # Switch to the current user's context
   if [ -n "$SUDO_USER" ]; then
     CURRENT_USER="$SUDO_USER"
   else
@@ -15,35 +18,44 @@ if [ "$EUID" -eq 0 ]; then
   fi
 fi
 
-# Now you can use $CURRENT_USER as the current user
-# For example:
-rm -rf "/home/$CURRENT_USER/system_state_tracking"
+SYSTEM_STATE_DIR="/home/$CURRENT_USER/system_state_tracking"
+LOGS_DIR="/home/$CURRENT_USER/logs"
 
 # Function to check if a package is installed
 is_installed() {
   dpkg -l | grep -q "$1"
 }
 
-# Function to revert changes
+# Function to revert package changes
 revert_packages() {
-  # Restore package list
-  sudo dpkg --clear-selections
-  sudo dpkg --set-selections < "${HOME}/system_state_tracking/package_list_before.txt"
-  sudo apt-get dselect-upgrade -y
+  if [ -f "${SYSTEM_STATE_DIR}/package_list_before.txt" ]; then
+    read -p "Do you want to revert packages to the initial state? [y/N]: " confirm
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+      sudo dpkg --clear-selections
+      sudo dpkg --set-selections < "${SYSTEM_STATE_DIR}/package_list_before.txt"
+      sudo apt-get dselect-upgrade -y
+    fi
+  else
+    echo "Initial package list not found. Skipping package reversion."
+  fi
 }
 
 # Delete any new files with confirmation
 revert_files() {
-  comm -13 "${HOME}/system_state_tracking/filesystem_before.txt" "${HOME}/system_state_tracking/filesystem_after.txt" | while read -r line; do
-    if [[ "$line" == ${HOME}* ]]; then  # only delete files in the user's home directory to be safe
-      read -p "Delete $line? [y/N]: " confirm
-      if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-        sudo rm -rf "$line"
-      else
-        echo "Skipping deletion of $line."
+  if [ -f "${SYSTEM_STATE_DIR}/filesystem_before.txt" ] && [ -f "${SYSTEM_STATE_DIR}/filesystem_after.txt" ]; then
+    comm -13 "${SYSTEM_STATE_DIR}/filesystem_before.txt" "${SYSTEM_STATE_DIR}/filesystem_after.txt" | while read -r line; do
+      if [[ "$line" == ${HOME}* ]]; then  # only delete files in the user's home directory to be safe
+        read -p "Delete $line? [y/N]: " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+          sudo rm -rf "$line"
+        else
+          echo "Skipping deletion of $line."
+        fi
       fi
-    fi
-  done
+    done
+  else
+    echo "Filesystem state files not found. Skipping file deletion."
+  fi
 }
 
 # Uninstall Docker
