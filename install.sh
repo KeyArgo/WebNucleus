@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1a
+# Version: 0.1.2
 # Date: 2023-09-16
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -28,21 +28,28 @@ fi
 mkdir -p "/home/$CURRENT_USER/system_state_tracking"
 
 
+# Add echo statements for debugging
+echo "Starting script..."
+
 # Prompt for Secrets Early
+echo "Prompting for secrets..."
 read -sp "Enter Authelia JWT Secret: " AUTHELIA_JWT_SECRET
 read -sp "Enter Authelia Session Secret: " AUTHELIA_SESSION_SECRET
 export AUTHELIA_JWT_SECRET
 export AUTHELIA_SESSION_SECRET
 
-# Create tracking and logging directories under current user
+# Create tracking and logging directories under the current user
+echo "Creating tracking and logging directories..."
 mkdir -p "${HOME}/system_state_tracking"
 mkdir -p "${HOME}/logs"
 
 # Enable exit on error and log errors
+echo "Enabling error handling..."
 trap 'echo "An error occurred. Exiting. Reverting Changes..." >&2; revert_changes; echo "An error occurred at $(date)" >> ${HOME}/logs/error.log; exit 1' ERR
 set -e
 
 # Update and upgrade packages if not done already
+echo "Updating and upgrading packages..."
 if ! [ -f "${HOME}/system_state_tracking/apt_updated" ]; then
   sudo apt update -y
   sudo apt dist-upgrade -y --allow-remove-essential || true
@@ -53,6 +60,7 @@ fi
 set +e
 
 # Function to revert changes
+echo "Defining the revert_changes function..."
 revert_changes() {
   # Restore package list
   sudo dpkg --clear-selections
@@ -64,9 +72,19 @@ revert_changes() {
   done
 }
 
-# Save system state before installation
-dpkg --get-selections > "${HOME}/system_state_tracking/package_list_before.txt"
-find /etc /usr /var -maxdepth 3 > "${HOME}/system_state_tracking/filesystem_before.txt"
+# Save system state after installation
+dpkg --get-selections > "${HOME}/system_state_tracking/package_list_after.txt"
+find /etc /usr /var -maxdepth 3 > "${HOME}/system_state_tracking/filesystem_after.txt"
+
+# Ensure both files exist before using comm
+if [ -f "${HOME}/system_state_tracking/filesystem_before.txt" ] && [ -f "${HOME}/system_state_tracking/filesystem_after.txt" ]; then
+  # Use comm only if both files exist
+  comm -13 "${HOME}/system_state_tracking/filesystem_before.txt" "${HOME}/system_state_tracking/filesystem_after.txt" | while read -r line; do
+    rm -rf "$line"
+  done
+else
+  echo "Warning: filesystem_before.txt or filesystem_after.txt not found. Skipping comm command."
+fi
 
 # Install Basic Utilities like curl, wget, and git
 for pkg in curl wget git; do
@@ -100,6 +118,10 @@ fi
 # Fetch UID and GID
 CURRENT_UID=$(id -u)
 CURRENT_GID=$(id -g)
+# Prompt for the desired hostname or IP address
+echo "Before reading input"
+read -p "Enter the hostname or IP address for Authelia (e.g., 10.1.1.100): " YOUR_HOSTNAME_OR_IP
+echo "After reading input"
 
 # Create Authelia Docker Compose file
 cat > authelia-docker-compose.yml <<EOL
@@ -116,10 +138,10 @@ services:
       - no-new-privileges:true
     labels:
       - 'traefik.enable=true'
-      - 'traefik.http.routers.authelia.rule=Host(`10.1.1.100`)'
+      - 'traefik.http.routers.authelia.rule=Host(\${YOUR_HOSTNAME_OR_IP})'
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
-      - 'traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://10.1.1.100'
+      - 'traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://\${YOUR_HOSTNAME_OR_IP}'
       - 'traefik.http.middlewares.authelia.forwardAuth.trustForwardHeader=true'
       - 'traefik.http.middlewares.authelia.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
       - 'traefik.http.middlewares.authelia-basic.forwardAuth.address=http://authelia:9091/api/verify?auth=basic'
@@ -161,7 +183,7 @@ export CURRENT_UID
 export CURRENT_GID
 
 docker-compose -f organizr-docker-compose.yml up -d
-
+ls -l
 # Create Organizr Docker Compose File
 cat > organizr-docker-compose.yml <<EOL
 version: '3.3'
@@ -180,7 +202,7 @@ services:
 EOL
 
 # Start services
-docker-compose -f organizr-docker-compose.yml up -d
+docker-compose -f "$HOME/organizr-docker-compose.yml" up -d
 
 # Nginx
 if ! is_installed 'nginx'; then
@@ -256,3 +278,4 @@ else
   echo "If you have any questions later, you can refer to the logs in ${HOME}/logs for more details."
 fi
 
+echo "Script execution completed successfully."
