@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1a
+# Version: 0.1.1
 # Date: 2023-09-16
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -100,8 +100,12 @@ fi
 # Fetch UID and GID
 CURRENT_UID=$(id -u)
 CURRENT_GID=$(id -g)
+# Prompt for the desired hostname or IP address
+read -p "Enter the hostname or IP address for Authelia (e.g., 10.1.1.100): " YOUR_HOSTNAME_OR_IP
 
 # Create Authelia Docker Compose file
+bash
+Copy code
 cat > authelia-docker-compose.yml <<EOL
 version: '3'
 services:
@@ -116,10 +120,10 @@ services:
       - no-new-privileges:true
     labels:
       - 'traefik.enable=true'
-      - 'traefik.http.routers.authelia.rule=Host(`10.1.1.100`)'
+      - 'traefik.http.routers.authelia.rule=Host(\${YOUR_HOSTNAME_OR_IP})'
       - 'traefik.http.routers.authelia.entrypoints=https'
       - 'traefik.http.routers.authelia.tls=true'
-      - 'traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://10.1.1.100'
+      - 'traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://\${YOUR_HOSTNAME_OR_IP}'
       - 'traefik.http.middlewares.authelia.forwardAuth.trustForwardHeader=true'
       - 'traefik.http.middlewares.authelia.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
       - 'traefik.http.middlewares.authelia-basic.forwardAuth.address=http://authelia:9091/api/verify?auth=basic'
