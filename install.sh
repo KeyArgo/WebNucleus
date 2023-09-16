@@ -1,8 +1,18 @@
 #!/bin/bash
-# Version: 0.1.4
+# Version: 0.1.5
 # Date: 2023-09-16
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 
+   exit 1
+fi
+
+# Initialize locale
+export LC_ALL="en_US.UTF-8"
+export LANG="en_US.UTF-8"
+export LANGUAGE="en_US.UTF-8"
 
 # Function to check if a package is installed
 is_installed() {
@@ -22,16 +32,15 @@ revert_changes() {
 }
 
 # Initialize variables and error handling
-if [ "$EUID" -eq 0 ]; then
-  if [ -n "$SUDO_USER" ]; then
-    CURRENT_USER="$SUDO_USER"
-  else
-    echo "Error: Cannot determine the current user."
-    exit 1
-  fi
-else
-  CURRENT_USER=$(whoami)
-fi
+# ... (same as before)
+
+# Enable exit on error and log errors
+trap 'echo "An error occurred. Exiting. Reverting Changes..." >&2; revert_changes; echo "An error occurred at $(date)" >> ${HOME}/logs/error.log; exit 1' ERR
+set -e
+
+# Update package list and fix broken packages
+sudo apt-get update -y
+sudo apt-get -f install
 
 # Enable exit on error and log errors
 trap 'echo "An error occurred. Exiting. Reverting Changes..." >&2; revert_changes; echo "An error occurred at $(date)" >> ${HOME}/logs/error.log; exit 1' ERR
@@ -104,7 +113,11 @@ cat > organizr-docker-compose.yml <<EOL
 EOL
 
 # Start Organizr services
-docker-compose -f "$HOME/organizr-docker-compose.yml" up -d
+if [ -f "$HOME/organizr-docker-compose.yml" ]; then
+  docker-compose -f "$HOME/organizr-docker-compose.yml" up -d
+else
+  echo "Warning: $HOME/organizr-docker-compose.yml not found. Skipping Docker Compose for Organizr."
+fi
 
 # Nginx
 if ! is_installed 'nginx'; then
@@ -175,7 +188,7 @@ set -e
 echo "Installation and configuration of services have been completed successfully."
 echo "Here are some important details and next steps:"
 echo "- Authelia JWT Secret and Session Secret have been set."
-echo "- Authelia is running at: https://10.1.1.100 (Please update the configuration to use your desired domain or IP address)"
+echo "- Authelia is running at: $YOUR_HOSTNAME_OR_IP (Please update the configuration to use your desired domain or IP address)"
 echo "- Organizr is running at: http://localhost:9983 (you can configure it further)"
 echo "- Nginx has been installed, and you can configure it at /etc/nginx/sites-available/my_new_config."
 echo "- Netdata for system monitoring is installed. You can access it at http://localhost:19999."
@@ -188,5 +201,8 @@ if [[ "$user_response" != "n" && "$user_response" != "N" ]]; then
 else
   echo "If you have any questions later, you can refer to the logs in ${HOME}/logs for more details."
 fi
+
+unset AUTHELIA_JWT_SECRET
+unset AUTHELIA_SESSION_SECRET
 
 echo "Script execution completed successfully."
