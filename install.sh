@@ -104,8 +104,6 @@ CURRENT_GID=$(id -g)
 read -p "Enter the hostname or IP address for Authelia (e.g., 10.1.1.100): " YOUR_HOSTNAME_OR_IP
 
 # Create Authelia Docker Compose file
-bash
-Copy code
 cat > authelia-docker-compose.yml <<EOL
 version: '3'
 services:
