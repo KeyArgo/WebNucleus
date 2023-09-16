@@ -32,45 +32,59 @@ revert_packages() {
   sudo apt-get dselect-upgrade -y
 }
 
-# Delete any new files
+# Delete any new files with confirmation
 revert_files() {
-comm -13 "${HOME}/system_state_tracking/filesystem_before.txt" "${HOME}/system_state_tracking/filesystem_after.txt" | while read -r line; do
-  if [[ "$line" == ${HOME}* ]]; then  # only delete files in the user's home directory to be safe
-    sudo rm -rf "$line"
-  fi
-done
+  comm -13 "${HOME}/system_state_tracking/filesystem_before.txt" "${HOME}/system_state_tracking/filesystem_after.txt" | while read -r line; do
+    if [[ "$line" == ${HOME}* ]]; then  # only delete files in the user's home directory to be safe
+      read -p "Delete $line? [y/N]: " confirm
+      if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+        sudo rm -rf "$line"
+      else
+        echo "Skipping deletion of $line."
+      fi
+    fi
+  done
 }
 
 # Uninstall Docker
+echo "Uninstalling Docker..."
 sudo apt-get remove docker docker-engine docker.io containerd runc
 
 # Remove Docker Compose
+echo "Removing Docker Compose..."
 sudo rm /usr/local/bin/docker-compose
 
 # Remove k3s
 if [ -f "/usr/local/bin/k3s-uninstall.sh" ]; then
+  echo "Uninstalling k3s..."
   /usr/local/bin/k3s-uninstall.sh
 else
   echo "k3s uninstall script not found. Skipping..."
 fi
 
-#Disable Services from Starting at Boot
+# Disable Services from Starting at Boot
+echo "Disabling services from starting at boot..."
 sudo systemctl disable nginx
 sudo systemctl disable netdata
 
-# Remove nginx
+# Remove nginx if installed
 if is_installed "nginx"; then
+  echo "Removing nginx..."
   sudo apt remove -y nginx
 fi
 
-# Remove Netdata
-sudo apt remove -y netdata
+# Remove Netdata if installed
+if is_installed "netdata"; then
+  echo "Removing Netdata..."
+  sudo apt remove -y netdata
+fi
 
 # Restore the previous package list and delete new files
 revert_packages
 revert_files
 
 # Remove tracking and logging directories
+echo "Removing tracking and logging directories..."
 rm -rf "${HOME}/system_state_tracking"
 rm -rf "${HOME}/logs"
 
