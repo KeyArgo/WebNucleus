@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1.2
+# Version: 0.1.3
 # Date: 2023-09-16
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Uninstall and revert services and packages installed by the install script.
