@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.1
+# Version: 0.2.2
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -198,17 +198,25 @@ EOL
 if ! is_installed 'nginx'; then
     echo "Nginx not found. Installing..."
     sudo apt install -y nginx
+	sudo systemctl start nginx
 fi
+
+# Debug step
+echo "Checking Nginx installation status..."
+nginx -v
+
 sudo bash -c "cat > /etc/nginx/sites-available/my_new_config <<EOL
 server {
   listen 80;
   # more configuration
 }
 EOL"
-if which nginx > /dev/null; then
-    sudo nginx -s reload
+
+# Check if nginx is installed and active
+if sudo systemctl is-active --quiet nginx; then
+    sudo systemctl reload nginx
 else
-    echo "Nginx command not found. Please check if Nginx was installed correctly."
+    echo "Nginx service is not active. Please check if Nginx was installed correctly."
     exit 1
 fi
 
