@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.2
+# Version: 0.2.3
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -203,7 +203,7 @@ fi
 
 # Debug step
 echo "Checking Nginx installation status..."
-nginx -v
+/usr/sbin/nginx -v
 
 sudo bash -c "cat > /etc/nginx/sites-available/my_new_config <<EOL
 server {
