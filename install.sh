@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.3
+# Version: 0.2.4
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -198,25 +198,24 @@ EOL
 if ! is_installed 'nginx'; then
     echo "Nginx not found. Installing..."
     sudo apt install -y nginx
-	sudo systemctl start nginx
+    sudo systemctl start nginx
+fi
+
+# Ensure nginx binary exists
+if [[ ! -f "/usr/sbin/nginx" ]]; then
+    echo "Error: Nginx binary not found at /usr/sbin/nginx."
+    exit 1
 fi
 
 # Debug step
 echo "Checking Nginx installation status..."
 /usr/sbin/nginx -v
 
-sudo bash -c "cat > /etc/nginx/sites-available/my_new_config <<EOL
-server {
-  listen 80;
-  # more configuration
-}
-EOL"
-
 # Check if nginx is installed and active
 if sudo systemctl is-active --quiet nginx; then
     sudo systemctl reload nginx
 else
-    echo "Nginx service is not active. Please check if Nginx was installed correctly."
+    echo "Error: Nginx service is not active. Please ensure Nginx was installed correctly."
     exit 1
 fi
 

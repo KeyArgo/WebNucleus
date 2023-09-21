@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1.8
+# Version: 0.2.4
 # Date: 09-22-2023
 # Description: Uninstall and revert services and packages installed by the install script.
 
@@ -43,9 +43,11 @@ revert_packages() {
 }
 
 # Remove Docker
-if is_installed "docker"; then
+if is_installed "docker" || is_installed "docker-ce" || is_installed "docker-engine"; then
   echo "Uninstalling Docker..."
-  sudo apt-get purge -y docker docker-engine docker.io containerd runc
+  sudo apt-get purge -y docker docker-ce docker-engine docker.io containerd runc
+  # If Docker was installed from get.docker.com or other methods:
+  sudo rm -rf /var/lib/docker
 fi
 
 # Remove Docker Compose
