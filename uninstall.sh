@@ -1,6 +1,6 @@
 #!/bin/bash
-# Version: 0.1.5
-# Date: 2023-09-16
+# Version: 0.1.7
+# Date: 09-21-2023
 # Description: Uninstall and revert services and packages installed by the install script.
 
 # Warning and confirmation
