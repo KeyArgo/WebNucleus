@@ -246,7 +246,7 @@ fi
 
 # Start Authelia and Organizr containers
 docker-compose -f authelia-docker-compose.yml up -d
-docker-compose up -d organizr
+docker-compose -f organizr-docker-compose.yml up -d
 
 # Final prompt
 echo "Installation and configuration of services have been completed successfully."
