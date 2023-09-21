@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.4
+# Version: 0.2.5
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -204,12 +204,15 @@ fi
 # Ensure nginx binary exists
 if [[ ! -f "/usr/sbin/nginx" ]]; then
     echo "Error: Nginx binary not found at /usr/sbin/nginx."
+    echo "Please check the installation or adjust the script to use the correct path."
     exit 1
 fi
 
+which nginx
+
 # Debug step
 echo "Checking Nginx installation status..."
-/usr/sbin/nginx -v
+sudo systemctl status nginx
 
 # Check if nginx is installed and active
 if sudo systemctl is-active --quiet nginx; then
@@ -221,7 +224,10 @@ fi
 
 # Netdata Installation
 if ! [ -x "$(command -v netdata)" ]; then
-    sudo -u _apt bash <(curl -Ss https://my-netdata.io/kickstart.sh)
+    temp_script="/tmp/kickstart_netdata.sh"
+	curl -Ss https://my-netdata.io/kickstart.sh -o ${temp_script}
+	sudo -u _apt bash ${temp_script}
+	rm -f ${temp_script}
 fi
 
 # Save final system state
