@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.4
+# Version: 0.2.6
 # Date: 09-22-2023
 # Description: Uninstall and revert services and packages installed by the install script.
 
@@ -64,6 +64,7 @@ fi
 
 # Stop Nginx if running and installed
 if is_installed "nginx"; then
+  # Try to stop Nginx if it's running
   if systemctl is-active --quiet nginx; then
     echo "Stopping nginx..."
     sudo systemctl stop nginx
