@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1.9
+# Version: 0.2
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -38,6 +38,11 @@ revert_changes() {
     sudo dpkg --clear-selections
     sudo dpkg --set-selections < "${HOME}/system_state_tracking/package_list_before.txt"
     sudo apt-get dselect-upgrade -y
+
+    # Check if nginx was installed during this script's execution and remove it
+    if is_installed 'nginx' && ! grep -q 'nginx' "${HOME}/system_state_tracking/package_list_before.txt"; then
+        sudo apt remove -y nginx
+    fi
 }
 
 # Check for root
@@ -114,6 +119,9 @@ fi
 CURRENT_UID=$(id -u)
 CURRENT_GID=$(id -g)
 
+# Fetch the user's local timezone
+USER_TIMEZONE=$(timedatectl | grep "Time zone" | awk '{print $3}')
+
 # Authelia Setup
 read -p "Enter the hostname or IP address for Authelia (e.g., 10.1.1.100): " YOUR_HOSTNAME_OR_IP
 YOUR_HOSTNAME_OR_IP_VALUE=$(echo $YOUR_HOSTNAME_OR_IP)
@@ -147,7 +155,7 @@ services:
     environment:
       - AUTHELIA_JWT_SECRET=${AUTHELIA_JWT_SECRET}
       - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
-      - TZ=Europe/London
+      - TZ=${USER_TIMEZONE}
     healthcheck:
       disable: true
 
@@ -188,6 +196,7 @@ EOL
 
 # Nginx Setup
 if ! is_installed 'nginx'; then
+    echo "Nginx not found. Installing..."
     sudo apt install -y nginx
 fi
 sudo bash -c "cat > /etc/nginx/sites-available/my_new_config <<EOL
