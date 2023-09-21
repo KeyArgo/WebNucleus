@@ -1,6 +1,6 @@
 #!/bin/bash
-# Version: 0.1.6
-# Date: 2023-09-16
+# Version: 0.1.7
+# Date: 2023-09-21
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
 
@@ -117,12 +117,72 @@ CURRENT_GID=$(id -g)
 # Authelia Setup
 read -p "Enter the hostname or IP address for Authelia (e.g., 10.1.1.100): " YOUR_HOSTNAME_OR_IP
 cat > authelia-docker-compose.yml <<EOL
-# Authelia configuration here
+-version: '3'
+services:
+  authelia:
+    image: authelia/authelia
+    container_name: authelia
+    volumes:
+      - ${HOME}/docker/authelia/config:/config
+    networks:
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.authelia.rule=Host(\${YOUR_HOSTNAME_OR_IP})'
+      - 'traefik.http.routers.authelia.entrypoints=https'
+      - 'traefik.http.routers.authelia.tls=true'
+      - 'traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://\${YOUR_HOSTNAME_OR_IP}'
+      - 'traefik.http.middlewares.authelia.forwardAuth.trustForwardHeader=true'
+      - 'traefik.http.middlewares.authelia.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
+      - 'traefik.http.middlewares.authelia-basic.forwardAuth.address=http://authelia:9091/api/verify?auth=basic'
+      - 'traefik.http.middlewares.authelia-basic.forwardAuth.trustForwardHeader=true'
+      - 'traefik.http.middlewares.authelia-basic.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
+      - 'traefik.http.services.authelia.loadbalancer.server.port=9091'
+    ports:
+      - 9091:9091
+    restart: unless-stopped
+    environment:
+      - AUTHELIA_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+      - TZ=Europe/London
+    healthcheck:
+      disable: true
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    volumes:
+      - ${HOME}/docker/redis:/data
+    networks:
+      - proxy
+    expose:
+      - 6379
+    restart: unless-stopped
+    environment:
+      - TZ=America/Denver
+
+networks:
+  proxy:
+    external: true
 EOL
 
 # Organizr Setup
 cat > organizr-docker-compose.yml <<EOL
-# Organizr configuration here
+version: '3.3'
+services:
+  organizr:
+    image: organizr/organizr
+    container_name: organizr
+    environment:
+      - PUID=${CURRENT_UID}
+      - PGID=${CURRENT_GID}
+    volumes:
+      - ${HOME}/organizr/config:/config
+    ports:
+      - 9983:80
+    restart: unless-stopped
 EOL
 
 # Nginx Setup
@@ -147,16 +207,33 @@ echo "Saving final system state..."
 dpkg --get-selections > "${HOME}/system_state_tracking/package_list_after.txt"
 find /etc /usr /var -maxdepth 3 > "${HOME}/system_state_tracking/filesystem_after.txt"
 
+# Start Authelia and Organizr containers
+docker-compose -f authelia-docker-compose.yml up -d
+docker-compose up -d organizr
+
 # Final prompt
 echo "Installation and configuration of services have been completed successfully."
 echo "Here are some important details and next steps:"
-echo "- Authelia JWT Secret and Session Secret have been set."
-echo "- Authelia is running at: $YOUR_HOSTNAME_OR_IP"
-echo "- Organizr is running at: http://localhost:9983"
-echo "- Nginx has been installed. Configuration is at /etc/nginx/sites-available/my_new_config."
-echo "- Netdata for system monitoring is installed. You can access it at http://localhost:19999."
-echo "Remember to edit Nginx configuration and configure alerts for Netdata."
-echo "To fix Authelia's configuration, edit ${HOME}/authelia-docker-compose.yml."
+echo "----------------------------------------------"
+echo "Authelia:"
+echo "- JWT Secret: ${AUTHELIA_JWT_SECRET}"
+echo "- Session Secret: ${AUTHELIA_SESSION_SECRET}"
+echo "- Running at: http://${YOUR_HOSTNAME_OR_IP}:9091"  # Assuming 9091 is the port for Authelia, change if different
+echo
+echo "Organizr:"
+echo "- Running at: http://localhost:9983"
+echo
+echo "Nginx:"
+echo "- Installed and configured."
+echo "- Configuration is at /etc/nginx/sites-available/my_new_config."
+echo
+echo "Netdata:"
+echo "- For system monitoring, access it at http://localhost:19999."
+echo
+echo "NOTES:"
+echo "1. Remember to edit Nginx configuration and configure alerts for Netdata."
+echo "2. To fix Authelia's configuration, edit ${HOME}/authelia-docker-compose.yml."
+echo "----------------------------------------------"
 
 read -p "Do you have any questions or need further assistance? [Y/n]: " user_response
 if [[ "$user_response" != "n" && "$user_response" != "N" ]]; then
