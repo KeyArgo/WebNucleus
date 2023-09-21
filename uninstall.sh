@@ -1,6 +1,6 @@
 #!/bin/bash
-# Version: 0.1.7
-# Date: 09-21-2023
+# Version: 0.1.8
+# Date: 09-22-2023
 # Description: Uninstall and revert services and packages installed by the install script.
 
 # Warning and confirmation
@@ -18,11 +18,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # If running with sudo, get the username of the person who invoked sudo
-if [ -n "$SUDO_USER" ]; then
-    CURRENT_USER="$SUDO_USER"
-else
-    CURRENT_USER="$(whoami)"
-fi
+CURRENT_USER=${SUDO_USER:-$(whoami)}
 
 SYSTEM_STATE_DIR="/home/$CURRENT_USER/system_state_tracking"
 LOGS_DIR="/home/$CURRENT_USER/logs"
@@ -50,13 +46,6 @@ revert_packages() {
 if is_installed "docker"; then
   echo "Uninstalling Docker..."
   sudo apt-get purge -y docker docker-engine docker.io containerd runc
-  # Remove Docker data directory if it exists
-  if [ -d "/var/lib/docker" ]; then
-    read -p "Do you want to remove Docker data (containers, images, volumes, etc.)? [y/N]: " docker_data_confirm
-    if [[ "$docker_data_confirm" == "y" || "$docker_data_confirm" == "Y" ]]; then
-      sudo rm -rf /var/lib/docker
-    fi
-  fi
 fi
 
 # Remove Docker Compose
@@ -71,64 +60,45 @@ if [ -f "/usr/local/bin/k3s-uninstall.sh" ]; then
   /usr/local/bin/k3s-uninstall.sh
 fi
 
-# After uninstalling k3s, manually check for any remaining files or directories
-if [ -d "/var/lib/rancher/k3s" ]; then
-  read -p "Do you want to remove remaining k3s data? [y/N]: " k3s_data_confirm
-  if [[ "$k3s_data_confirm" == "y" || "$k3s_data_confirm" == "Y" ]]; then
-    sudo rm -rf /var/lib/rancher/k3s
-  fi
-fi
-
-if [ -f "/run/nginx.pid" ]; then
-    # Stop and disable nginx
-    if systemctl is-active --quiet nginx; then
-        echo "Stopping nginx..."
-        sudo systemctl stop nginx
-    fi
-
-    if systemctl is-enabled --quiet nginx; then
-        echo "Disabling nginx from starting at boot..."
-        sudo systemctl disable nginx
-    fi
-else
-    echo "Nginx seems to be not running. Skipping stopping and disabling steps."
-fi
-
-# Remove nginx if installed
+# Stop Nginx if running and installed
 if is_installed "nginx"; then
+  if systemctl is-active --quiet nginx; then
+    echo "Stopping nginx..."
+    sudo systemctl stop nginx
+    sudo systemctl disable nginx
+  fi
+
   echo "Removing nginx..."
   sudo apt remove --purge -y nginx
+else
+  echo "Nginx is not installed. Skipping removal."
 fi
 
 # Remove Netdata if installed
 if is_installed "netdata"; then
   echo "Removing Netdata..."
   sudo apt remove --purge -y netdata
+  
+  # Check and prompt for remaining directories
+  for dir in /var/log/netdata /var/lib/netdata /var/cache/netdata; do
+    if [ -d "$dir" ]; then
+      read -p "Do you want to remove remaining data in $dir? [y/N]: " dir_confirm
+      if [[ "$dir_confirm" == "y" || "$dir_confirm" == "Y" ]]; then
+        sudo rm -rf "$dir"
+      fi
+    fi
+  done
+else
+  echo "Netdata is not installed. Skipping removal."
 fi
 
 # Restore the previous package list
 revert_packages
 
-# Delete new files
-if [ -f "${SYSTEM_STATE_DIR}/filesystem_before.txt" ] && [ -f "${SYSTEM_STATE_DIR}/filesystem_after.txt" ]; then
-  comm -13 "${SYSTEM_STATE_DIR}/filesystem_before.txt" "${SYSTEM_STATE_DIR}/filesystem_after.txt" | while read -r line; do
-    if [[ "$line" == ${HOME}* ]]; then  # only delete files in the user's home directory to be safe
-      read -p "Delete $line? [y/N]: " confirm
-      if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-        sudo rm -rf "$line"
-      else
-        echo "Skipping deletion of $line."
-      fi
-    fi
-  done
-else
-  echo "Filesystem state files not found. Skipping file deletion."
-fi
-
 # Remove tracking and logging directories
 echo "Removing tracking and logging directories..."
-rm -rf "${SYSTEM_STATE_DIR}"
-rm -rf "${LOGS_DIR}"
+sudo rm -rf "${SYSTEM_STATE_DIR}"
+sudo rm -rf "${LOGS_DIR}"
 
 # Script Termination
 echo "Uninstall script executed. Please manually verify that all components were successfully removed."
