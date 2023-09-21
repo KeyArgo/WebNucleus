@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.1.8
+# Version: 0.1.9
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -130,17 +130,17 @@ services:
     security_opt:
       - no-new-privileges:true
     labels:
-      - 'traefik.enable=true'
-      - 'traefik.http.routers.authelia.rule=Host(${YOUR_HOSTNAME_OR_IP_VALUE})'
-      - 'traefik.http.routers.authelia.entrypoints=https'
-      - 'traefik.http.routers.authelia.tls=true'
-      - - 'traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://${YOUR_HOSTNAME_OR_IP_VALUE}'
-      - 'traefik.http.middlewares.authelia.forwardAuth.trustForwardHeader=true'
-      - 'traefik.http.middlewares.authelia.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
-      - 'traefik.http.middlewares.authelia-basic.forwardAuth.address=http://authelia:9091/api/verify?auth=basic'
-      - 'traefik.http.middlewares.authelia-basic.forwardAuth.trustForwardHeader=true'
-      - 'traefik.http.middlewares.authelia-basic.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
-      - 'traefik.http.services.authelia.loadbalancer.server.port=9091'
+      - traefik.enable=true
+      - traefik.http.routers.authelia.rule=Host(${YOUR_HOSTNAME_OR_IP_VALUE})
+      - traefik.http.routers.authelia.entrypoints=https
+      - traefik.http.routers.authelia.tls=true
+      - traefik.http.middlewares.authelia.forwardAuth.address=http://authelia:9091/api/verify?rd=https://${YOUR_HOSTNAME_OR_IP_VALUE}
+      - traefik.http.middlewares.authelia.forwardAuth.trustForwardHeader=true
+      - traefik.http.middlewares.authelia.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
+      - traefik.http.middlewares.authelia-basic.forwardAuth.address=http://authelia:9091/api/verify?auth=basic
+      - traefik.http.middlewares.authelia-basic.forwardAuth.trustForwardHeader=true
+      - traefik.http.middlewares.authelia-basic.forwardAuth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email
+      - traefik.http.services.authelia.loadbalancer.server.port=9091
     ports:
       - 9091:9091
     restart: unless-stopped
@@ -200,7 +200,7 @@ sudo nginx -s reload
 
 # Netdata Installation
 if ! [ -x "$(command -v netdata)" ]; then
-    bash <(curl -Ss https://my-netdata.io/kickstart.sh)
+    sudo -u _apt bash <(curl -Ss https://my-netdata.io/kickstart.sh)
 fi
 
 # Save final system state
