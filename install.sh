@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2.7
+# Version: 0.2.8
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -237,6 +237,12 @@ fi
 echo "Saving final system state..."
 dpkg --get-selections > "${HOME}/system_state_tracking/package_list_after.txt"
 find /etc /usr /var -maxdepth 3 > "${HOME}/system_state_tracking/filesystem_after.txt"
+
+# Ensure Docker network 'proxy' exists
+if ! docker network ls | grep -q 'proxy'; then
+    echo "Creating Docker network 'proxy'..."
+    docker network create proxy
+fi
 
 # Start Authelia and Organizr containers
 docker-compose -f authelia-docker-compose.yml up -d
