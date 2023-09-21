@@ -200,6 +200,9 @@ if ! is_installed 'nginx'; then
     sudo apt install -y nginx
 fi
 
+echo "Starting Nginx..."
+sudo systemctl start nginx
+
 # Ensure nginx binary exists using which command
 NGINX_PATH=$(which nginx)
 if [[ -z "$NGINX_PATH" ]]; then
