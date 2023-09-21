@@ -79,18 +79,20 @@ if [ -d "/var/lib/rancher/k3s" ]; then
   fi
 fi
 
-# Stop and disable services
-for service in nginx netdata; do
-  if systemctl is-active --quiet "$service"; then
-    echo "Stopping $service..."
-    sudo systemctl stop "$service"
-  fi
+if [ -f "/run/nginx.pid" ]; then
+    # Stop and disable nginx
+    if systemctl is-active --quiet nginx; then
+        echo "Stopping nginx..."
+        sudo systemctl stop nginx
+    fi
 
-  if systemctl is-enabled --quiet "$service"; then
-    echo "Disabling $service from starting at boot..."
-    sudo systemctl disable "$service"
-  fi
-done
+    if systemctl is-enabled --quiet nginx; then
+        echo "Disabling nginx from starting at boot..."
+        sudo systemctl disable nginx
+    fi
+else
+    echo "Nginx seems to be not running. Skipping stopping and disabling steps."
+fi
 
 # Remove nginx if installed
 if is_installed "nginx"; then
