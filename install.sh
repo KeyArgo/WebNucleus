@@ -1,5 +1,5 @@
 #!/bin/bash
-# Version: 0.2
+# Version: 0.2.1
 # Date: 09-21-2023
 # Dependencies: Assumes Ubuntu or Debian-based system with apt package manager.
 # Description: Install and configure services.
@@ -205,7 +205,12 @@ server {
   # more configuration
 }
 EOL"
-sudo nginx -s reload
+if which nginx > /dev/null; then
+    sudo nginx -s reload
+else
+    echo "Nginx command not found. Please check if Nginx was installed correctly."
+    exit 1
+fi
 
 # Netdata Installation
 if ! [ -x "$(command -v netdata)" ]; then
